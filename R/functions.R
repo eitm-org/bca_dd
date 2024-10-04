@@ -305,3 +305,54 @@ plot_drcs <- function(condition,
                       "table" = efficacy.table) 
   return(return_list)
 }
+
+#input = dataframe with only 4 variables
+  #one variable for the x value (ctg)
+  #one variable for the y value (neural network)
+  #sheet_name
+  #treatment duration
+make_ctg_v_nn_plot <- function(df, x_var_nice = NA, y_var_nice = NA) {
+  trt_dur <- max(df$treatment_duration)
+  df <- df %>%
+    filter(treatment_duration == trt_dur)
+  #get nice variable names
+  if (is.na(x_var_nice)) {
+    x_var_nice <- str_to_title(str_replace_all(names(df)[[1]], "_", " "))
+  }
+  if (is.na(y_var_nice)) {
+    y_var_nice <- str_to_title(str_replace_all(names(df)[[2]], "_", " "))
+  }
+  #rename variables
+  df["xvar"] <- df[,1]
+  df["yvar"] <- df[,2]
+
+  #linear model
+  linmod <- lm(yvar ~ xvar, data = df)
+  linmod_summ <- summary(linmod)
+  coef <-  round(linmod_summ$coefficients[2,1], 3)
+  pval <-  linmod_summ$coefficients[2,4]
+  rsq <- round(linmod_summ$r.squared, 3)
+  if (pval < .001) {
+    pval <- formatC(pval, format = "e", digits = 3)
+  } else {
+    pval <- round(pval, 3)
+  }
+  #plot
+  ctgvnn_plot <- ggplot(data = df, aes(x = xvar, y = yvar)) +
+    geom_smooth(color = "black", method = "lm") +
+    geom_point(size = 3, alpha = .5, aes(color = sheet_name)) +
+    theme_bw() +
+    scale_color_viridis_d(end = .8) +
+    ggtitle("Neural Network vs CTG") +
+    labs(subtitle = paste("Treatment Duration =", trt_dur, "Days"),
+         color = "Plate ID") +
+    xlab(x_var_nice) +
+    ylab(y_var_nice) +
+    geom_label(aes(x = max(df$xvar, na.rm = TRUE), y = min(yvar, na.rm = TRUE)), label = paste("Pval:", pval), hjust = 1, vjust = .5) +
+    geom_label(aes(x = max(df$xvar, na.rm = TRUE), y = min(yvar, na.rm = TRUE)), label = paste("R^2:", toString(rsq)), hjust = 1, vjust = -0.65, parse = TRUE) +
+    geom_label(aes(x = max(df$xvar, na.rm = TRUE), y = min(yvar, na.rm = TRUE)), label = paste("Coef:", coef), hjust = 1, vjust = -2.3) +
+    xlim(c(min(df$xvar, na.rm = TRUE), max(df$xvar, na.rm = TRUE))) +
+    ylim(c(min(df$yvar, na.rm = TRUE), max(df$yvar, na.rm = TRUE)))
+  
+  return(ctgvnn_plot)
+}

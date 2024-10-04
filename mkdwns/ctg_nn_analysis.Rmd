@@ -41,53 +41,26 @@ df <- readRDS(read_this)
 ## Neural Network vs CTG Output
 
 ```{r ctg_v_nn, warning = FALSE, fig.height = 5, fig.width = 8}
-ctgvnn_plots <- list(0)
-i <- 5
 #filter df
 for_ctgvnn <- df %>%
-  filter(treatment_duration == "5")
-#linear model
-linmod <- lm(percent_control_nn_tla ~ percent_control_ctg, data = for_ctgvnn)
-linmod_summ <- summary(linmod)
-coef <-  round(linmod_summ$coefficients[2,1], 3)
-pval <-  linmod_summ$coefficients[2,4]
-rsq <- round(linmod_summ$r.squared, 3)
-if (pval < .001) {
-  pval <- formatC(pval, format = "e", digits = 3)
-} else {
-  pval <- round(pval, 3)
-}
-#plot
-ctgvnn_plot <- ggplot(data = for_ctgvnn, aes(x = percent_control_ctg, y = percent_control_nn_tla)) +
-  geom_smooth(color = "#69a3b9", method = "lm") +
-  geom_point(size = 3, alpha = .5) +
-  theme_bw() +
-  ggtitle("Neural Network vs CTG") +
-  labs(subtitle = paste("Treatment Duration =", i, "Days")) +
-  xlab("Percent Control RLU (CTG)") +
-  ylab("Percent Control Total Live Area (NN)") +
-  geom_label(aes(x = max(for_ctgvnn$percent_control_ctg, na.rm = TRUE), y = min(percent_control_nn_tla, na.rm = TRUE)), label = paste("Pval:", pval), hjust = 1, vjust = .5) +
-  geom_label(aes(x = max(for_ctgvnn$percent_control_ctg, na.rm = TRUE), y = min(percent_control_nn_tla, na.rm = TRUE)), label = paste("R^2:", toString(rsq)), hjust = 1, vjust = -0.65, parse = TRUE) +
-  geom_label(aes(x = max(for_ctgvnn$percent_control_ctg, na.rm = TRUE), y = min(percent_control_nn_tla, na.rm = TRUE)), label = paste("Coef:", coef), hjust = 1, vjust = -2.3) +
-  xlim(c(min(for_ctgvnn$percent_control_ctg, na.rm = TRUE), max(for_ctgvnn$percent_control_ctg, na.rm = TRUE))) +
-  ylim(c(min(for_ctgvnn$percent_control_nn_tla, na.rm = TRUE), max(for_ctgvnn$percent_control_nn_tla, na.rm = TRUE)))
-#add in plot from tme
-# tme_plot <- image_read("/Users/acoleman/Documents/GitHub/bca_dd/images/tme_nn_results.png")
-# tme_plot <- ggplot() +
-#   background_image(tme_plot) +
-#   coord_fixed()
-# 
-# ctgvnn_plot / tme_plot
+  dplyr::select(percent_control_ctg, percent_control_nn_tla, treatment_duration, sheet_name)
+ctgvnn_plot <- make_ctg_v_nn_plot(for_ctgvnn, x_var_nice = "Percent Control RLU Signal (CTG)", y_var_nice = "Percent Control Total Live Area (NN)")
+ctgvnn_raw <- df %>%
+  dplyr::select(signal, total_live_area, treatment_duration, sheet_name)
+ctg_nn_raw <- make_ctg_v_nn_plot(ctgvnn_raw, x_var_nice = "Raw RLU (CTG)", y_var_nice = "Total Live Area Raw (NN)")
 ```
 
 ```{r out.width = "50%"}
 ctgvnn_plot
 knitr::include_graphics("/Users/acoleman/Documents/GitHub/bca_dd/images/tme_nn_results.png")
 ```
+\n
 
+```{r ctgvnn_raw}
+ctg_nn_raw
+```
 
-  * total live area = mean_area_mm2_live*object_count_number_live_nn
-
+  * $Total\text{ }Live \text{ }Area = Mean\text{ }Area\text{ }mm^2\text{ }Live(Object\text{ }Count\text{ }Number\text{ }Live)$
   * this is the metric they used in the tme project as "nn output"
 
 \newpage
