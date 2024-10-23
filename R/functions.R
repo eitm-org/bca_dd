@@ -129,22 +129,27 @@ microsNNreader <- function(xls_path, write_meta = TRUE) {
   filename <- basename(xls_path)
   #get seeding date from filename
   s_date <- stringr::str_extract(filename, "[[:digit:]]{8}")
+  trt_dur <- stringr::str_extract(filename, "Image(\\d)")
+  ctg_merge <- stringr::str_extract(filename, "_(\\d{6})-")
   
   #clean large df. extract well, treatment treatment_duration, and experiment date info from the document name
   experiment_data <- bound_data %>%
     janitor::clean_names() %>%
     filter(!is.na(document)) %>%
     #plug in seeding date from filename
-    mutate(seeding_date = s_date) %>%
+    mutate(seeding_date = s_date,
+           treatment_duration = trt_dur,
+           ctg_merge_id = ctg_merge) %>%
     #extract well number from the "document" column
     extract(col = document, into = "well", regex = "([A-H]\\d{2})", remove = FALSE) %>%
-    #extract metadata from the "document" column
-    extract(col = document, into = "treatment_duration", regex = "Image(\\d)", remove = FALSE) %>%
-    extract(col = document, into = "ctg_merge_id", regex = "_(\\d{6})_", remove = FALSE) %>%
     #clean up extracted columns
     mutate(treatment_duration = str_remove_all(treatment_duration, "Image"),
-           ctg_merge_id = str_remove_all(ctg_merge_id, "_"),
-           seeding_date = as.Date(seeding_date, format = "%Y%m%d"))
+           ctg_merge_id = str_remove_all(ctg_merge_id, "_|-"),
+           seeding_date = as.Date(seeding_date, format = "%Y%m%d"),
+           nn = case_when(grepl("NewNN", xls_path) ~ "NewNN",
+                          TRUE ~ "OldNN")) 
+
+  
   #unmelt live/dead
   experiment_data2 <- dcast(experiment_data, ...~ object_class, 
                            #value.vars are all numeric variables
@@ -159,7 +164,7 @@ microsNNreader <- function(xls_path, write_meta = TRUE) {
 
 does_it_model <- function(data) {
   tryCatch({
-    drm(yvar ~ drug_concentration_ctg, data = data, fct = LL.4(names = c("hill", "min_value", "max_value", "ec_50")))
+    drm(yvar ~ drug_concentration_nm, data = data, fct = LL.4(names = c("hill", "min_value", "max_value", "ec_50")))
     return(TRUE)
   }, error = function(e) {
     return(FALSE)
@@ -181,16 +186,16 @@ plot_drcs <- function(condition,
                       col_list = c()) {
   require(drc)
   #make a blank plot to fill in with dose response curves
-  xmin <- min(experiment_df$drug_concentration_ctg, na.rm = TRUE)
+  xmin <- min(experiment_df$drug_concentration_nm, na.rm = TRUE)
   if (xmin == 0) {
-    xmin <- min(experiment_df$drug_concentration_ctg[experiment_df$drug_concentration_ctg != 0], na.rm = TRUE)
+    xmin <- min(experiment_df$drug_concentration_nm[experiment_df$drug_concentration_nm != 0], na.rm = TRUE)
     xmin <- xmin/2
   }
-  # breaks <- sort(unique(experiment_df$drug_concentration_ctg))
+  # breaks <- sort(unique(experiment_df$drug_concentration_nm))
   # breaks <- c(breaks[1], breaks[round(length(breaks)/3)], breaks[2*round(length(breaks)/3)], breaks[length(breaks)])
   the_plot <- ggplot() +
     theme_bw() +
-    scale_x_continuous(trans='log2', limit = c(xmin, max(experiment_df$drug_concentration_ctg, na.rm = TRUE))) +
+    scale_x_continuous(trans='log2', limit = c(xmin, max(experiment_df$drug_concentration_nm, na.rm = TRUE))) +
     scale_y_continuous(limit = c(0, y_limit))
   #rename colname in df
   experiment_df["yvar"] <- experiment_df[colname]
@@ -210,7 +215,7 @@ plot_drcs <- function(condition,
   
   df_nested <- df_nested %>%
     filter(does_it_model_col == TRUE) %>%
-    mutate(model = lapply(data, function(df) drm(yvar ~ drug_concentration_ctg, fct = LL.4(names = c("hill", "min_value", 'max_value', "ec_50")), data = df, control = drmc(errorm = FALSE))),
+    mutate(model = lapply(data, function(df) drm(yvar ~ drug_concentration_nm, fct = LL.4(names = c("hill", "min_value", 'max_value', "ec_50")), data = df, control = drmc(errorm = FALSE))),
            rse = vapply(model, function(model) summary(model)$rseMat[[1]], numeric(1)))
            # emax = vapply(data, function(df) min(df$sig_mean, na.rm = TRUE), numeric(1)),
            # plate_cv = vapply(data, function(df) mean(df$percent_cv, na.rm=TRUE), numeric(1)))
@@ -242,7 +247,7 @@ plot_drcs <- function(condition,
     this_model <- df_nested[i, "model"][[1]][[1]]
     this_df <- df_nested[i, "data"][[1]][[1]]
     #if there's only one concentration of this drug, we don't have to plot it
-    if (length(unique(this_df$drug_concentration_ctg)) <= 1) {
+    if (length(unique(this_df$drug_concentration_nm)) <= 1) {
       next
     }
     this_ic50 <- unlist(df_nested[i, "absolute_ec50"])
@@ -252,14 +257,14 @@ plot_drcs <- function(condition,
     
     point.data <- data.frame(
       y = this_df$yvar,
-      x = this_df$drug_concentration_ctg
+      x = this_df$drug_concentration_nm
     )
     
     if (does_it_model == TRUE) {
       curve.data.drc <- PR(
         this_model,
-        xVec = seq(to = min(this_df[this_df$drug_concentration_ctg > 0, "drug_concentration_ctg"], na.rm = TRUE), 
-                   from = max(this_df$drug_concentration_ctg, na.rm = TRUE),
+        xVec = seq(to = min(this_df[this_df$drug_concentration_nm > 0, "drug_concentration_nm"], na.rm = TRUE), 
+                   from = max(this_df$drug_concentration_nm, na.rm = TRUE),
                    length.out = 1000)
       )
       curve.data <- data.frame(
@@ -273,12 +278,12 @@ plot_drcs <- function(condition,
         # annotate("text", x = this_ic50[[1]], y = -5, label = round(this_ic50[[1]], digits = 3), color = this_color, size = 7.5)       
     } else {
       the_plot <- the_plot +
-        geom_smooth(data = this_df, linewidth = 1, mapping = aes(x = drug_concentration_ctg, y = yvar), color = this_color, se = FALSE)
+        geom_smooth(data = this_df, linewidth = 1, mapping = aes(x = drug_concentration_nm, y = yvar), color = this_color, se = FALSE)
     }
     
     the_plot <- the_plot +
-      annotate("text", x = min(this_df$drug_concentration_ctg), y = yheight, label = this_exp, hjust = 0, color = this_color, size = 3) +
-      geom_point(data = this_df, size = 2, mapping = aes(x = drug_concentration_ctg, y = yvar), color = this_color, alpha = .5)
+      annotate("text", x = min(this_df$drug_concentration_nm), y = yheight, label = this_exp, hjust = 0, color = this_color, size = 3) +
+      geom_point(data = this_df, size = 2, mapping = aes(x = drug_concentration_nm, y = yvar), color = this_color, alpha = .5)
     
     yheight <- yheight + 15
   }
@@ -288,7 +293,7 @@ plot_drcs <- function(condition,
   nice_colname <- str_replace_all(str_replace_all(nice_colname, "Nn", "NN"), "Tla", "Total Live Area")
   nice_colname <- paste(nice_colname, "(%)")
   the_plot <- the_plot +
-    labs(x = parse(text = "Dose (μM)"),
+    labs(x = parse(text = "Dose (nM)"),
          y = nice_colname,
          subtitle = paste0("Cell Line: ", unique(experiment_df$cell_line_ctg))) +
     ggtitle(paste0("Condition: ", condition)) +
@@ -312,7 +317,8 @@ plot_drcs <- function(condition,
   #sheet_name
   #treatment duration
 make_ctg_v_nn_plot <- function(df, x_var_nice = NA, y_var_nice = NA) {
-  trt_dur <- max(df$treatment_duration)
+
+  trt_dur <- max(df$treatment_duration, na.rm = TRUE)
   df <- df %>%
     filter(treatment_duration == trt_dur)
   #get nice variable names
@@ -326,21 +332,36 @@ make_ctg_v_nn_plot <- function(df, x_var_nice = NA, y_var_nice = NA) {
   df["xvar"] <- df[,1]
   df["yvar"] <- df[,2]
 
-  #linear model
-  linmod <- lm(yvar ~ xvar, data = df)
-  linmod_summ <- summary(linmod)
-  coef <-  round(linmod_summ$coefficients[2,1], 3)
-  pval <-  linmod_summ$coefficients[2,4]
-  rsq <- round(linmod_summ$r.squared, 3)
-  if (pval < .001) {
-    pval <- formatC(pval, format = "e", digits = 3)
-  } else {
-    pval <- round(pval, 3)
+  #linear model for each unique value of nn column
+  for (i in 1:length(unique(df$nn))) {
+    df_filt_nn <- df %>%
+      filter(nn == unique(df$nn)[[i]])
+    linmod <- lm(yvar ~ xvar, data = df_filt_nn)
+    linmod_summ <- summary(linmod)
+    coef <-  round(linmod_summ$coefficients[2,1], 3)
+    pval <-  linmod_summ$coefficients[2,4]
+    rsq <- round(linmod_summ$r.squared, 3)
+    #put pval in scientific notation if it's very big
+    if (pval < .001) {
+      pval <- formatC(pval, format = "e", digits = 3)
+    } else {
+      pval <- round(pval, 3)
+    }
+    #make output dataframe
+      #all variables can be stored as strings cuz we're just putting them in a ggplot annotation anyways
+    if (!exists("lm_df")) {
+      #set the value of the first row of the lm_df dataframe
+      lm_df <- data.frame(nn = unique(df$nn)[[i]], coef = coef, pval = toString(pval), rsq = rsq)
+    } else {
+      #set the value of the 2nd-nth row/s of the lm_df dataframe
+      lm_df[i,] <-  data.frame(nn = unique(df$nn)[[i]], coef = coef, pval = toString(pval), rsq = rsq)
+    }
   }
+
   #plot
-  ctgvnn_plot <- ggplot(data = df, aes(x = xvar, y = yvar)) +
-    geom_smooth(color = "black", method = "lm") +
-    geom_point(size = 3, alpha = .5, aes(color = sheet_name)) +
+  ctgvnn_plot <- ggplot() +
+    geom_smooth(data = df, aes(x = xvar, y = yvar), color = "black", method = "lm") +
+    geom_point(data = df, aes(x = xvar, y = yvar, color = sheet_name_ctg), size = 3, alpha = .5) +
     theme_bw() +
     scale_color_viridis_d(end = .8) +
     ggtitle("Neural Network vs CTG") +
@@ -348,11 +369,12 @@ make_ctg_v_nn_plot <- function(df, x_var_nice = NA, y_var_nice = NA) {
          color = "Plate ID") +
     xlab(x_var_nice) +
     ylab(y_var_nice) +
-    geom_label(aes(x = max(df$xvar, na.rm = TRUE), y = min(yvar, na.rm = TRUE)), label = paste("Pval:", pval), hjust = 1, vjust = .5) +
-    geom_label(aes(x = max(df$xvar, na.rm = TRUE), y = min(yvar, na.rm = TRUE)), label = paste("R^2:", toString(rsq)), hjust = 1, vjust = -0.65, parse = TRUE) +
-    geom_label(aes(x = max(df$xvar, na.rm = TRUE), y = min(yvar, na.rm = TRUE)), label = paste("Coef:", coef), hjust = 1, vjust = -2.3) +
+    geom_label(data = lm_df, aes(x = max(df$xvar, na.rm = TRUE), y = min(df$yvar, na.rm = TRUE), label = paste("Pval:", pval)), hjust = 1, vjust = .5) +
+    geom_label(data = lm_df, aes(x = max(df$xvar, na.rm = TRUE), y = min(df$yvar, na.rm = TRUE), label = paste("R^2:", rsq)), hjust = 1, vjust = -0.65, parse = TRUE) +
+    geom_label(data = lm_df, aes(x = max(df$xvar, na.rm = TRUE), y = min(df$yvar, na.rm = TRUE), label = paste("Coef:", coef)), hjust = 1, vjust = -2.3) +
     xlim(c(min(df$xvar, na.rm = TRUE), max(df$xvar, na.rm = TRUE))) +
-    ylim(c(min(df$yvar, na.rm = TRUE), max(df$yvar, na.rm = TRUE)))
+    ylim(c(min(df$yvar, na.rm = TRUE), max(df$yvar, na.rm = TRUE))) +
+    facet_wrap(~nn)
   
   return(ctgvnn_plot)
 }

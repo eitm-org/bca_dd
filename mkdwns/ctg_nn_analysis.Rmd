@@ -43,20 +43,28 @@ df <- readRDS(read_this)
 ```{r ctg_v_nn, warning = FALSE, fig.height = 5, fig.width = 8}
 #filter df
 for_ctgvnn <- df %>%
-  dplyr::select(percent_control_ctg, percent_control_nn_tla, treatment_duration, sheet_name)
-ctgvnn_plot <- make_ctg_v_nn_plot(for_ctgvnn, x_var_nice = "Percent Control RLU Signal (CTG)", y_var_nice = "Percent Control Total Live Area (NN)")
+  dplyr::select(percent_control_ctg, percent_control_nn_tla, treatment_duration, sheet_name_ctg, nn)
+ctgvnn_plot <- make_ctg_v_nn_plot(df = for_ctgvnn, x_var_nice = "Percent Control RLU signal_ctg (CTG)", y_var_nice = "Percent Control Total Live Area (NN)")
 ctgvnn_raw <- df %>%
-  dplyr::select(signal, total_live_area, treatment_duration, sheet_name)
+  dplyr::select(signal_ctg, total_live_area_nn, treatment_duration, sheet_name_ctg, nn)
 ctg_nn_raw <- make_ctg_v_nn_plot(ctgvnn_raw, x_var_nice = "Raw RLU (CTG)", y_var_nice = "Total Live Area Raw (NN)")
 ```
 
-```{r out.width = "50%"}
+```{r include = FALSE}
+ctgplot0 <- ggplot(data = df[df$treatment_duration == 5,], aes(x = percent_control_ctg, y = percent_control_nn_tla)) +
+  facet_wrap(~nn) +
+  geom_point(alpha = .5) +
+  geom_smooth(method = "lm")
+ctgplot0
+```
+
+```{r ctg_v_nn_print, fig.height = 4, fig.width = 6, out.width = "40%"}
 ctgvnn_plot
 knitr::include_graphics("/Users/acoleman/Documents/GitHub/bca_dd/images/tme_nn_results.png")
 ```
 \n
 
-```{r ctgvnn_raw}
+```{r ctgvnn_raw, fig.height = 4, out.width = "40%"}
 ctg_nn_raw
 ```
 
@@ -67,17 +75,19 @@ ctg_nn_raw
 
 ## Raw Values by Condition
 
-```{r zprime_plot, fig.width = 10, fig.height = 5, out.width = "100%", out.height = "25%", results = "asis"}
+The following plots show raw value by condition for each plate and treatment duration. They are included for quality control purposes.
+
+```{r zprime_plot, fig.height = 7, fig.width =15, results = "asis"}
 for_z_plot <- df %>%
-  dplyr::select(c(sheet_name_ctg, signal_ctg, total_live_area_nn, sheet_name_ctg, condition_ctg, drug_concentration_ctg, treatment_duration, control, plate_zprime_ctg, plate_zprime_nn_tla)) %>%
-  melt(id = c("sheet_name_ctg", "condition_ctg", "drug_concentration_ctg", "treatment_duration", "control", "plate_zprime_ctg", "plate_zprime_nn_tla"))
+  dplyr::select(c(sheet_name_ctg, signal_ctg, total_live_area_nn, sheet_name_ctg, condition_ctg, drug_concentration_nm, treatment_duration, control, plate_zprime_ctg, plate_zprime_nn_tla, nn)) %>%
+  melt(id = c("sheet_name_ctg", "condition_ctg", "drug_concentration_nm", "treatment_duration", "control", "plate_zprime_ctg", "plate_zprime_nn_tla", "nn"))
 
 zplots <- list()
 
 for (i in unique(for_z_plot$treatment_duration)) {
-  cat("\n")
-  cat("### Treatment Duration (Days):", i)
-  cat("\n")
+  # cat("\n")
+  # cat("### Treatment Duration (Days):", i)
+  # cat("\n")
   for_z_plot2 <- for_z_plot %>%
     filter(treatment_duration == i) %>%
     distinct() %>%
@@ -104,67 +114,81 @@ for (i in unique(for_z_plot$treatment_duration)) {
     for_z_plot3[["plate_zprime"]] <- for_z_plot3[[plate_zprime_col]]
 
     zp_plot <- ggplot(data = for_z_plot3, aes(x = condition_ctg, y = value)) +
-      facet_wrap(~sheet_name_ctg) +
       theme_bw() +
       geom_boxplot() +
-      geom_label(aes(x = length(unique(for_z_plot3$condition_ctg)), y = min(for_z_plot3$value), label = paste("Z'Factor:", round(plate_zprime, 4))), hjust = 1, vjust = 0) +
-      geom_quasirandom(aes(shape = control, color = drug_concentration_ctg), alpha = .5, size = 4) +
+      geom_label(aes(x = length(unique(for_z_plot3$condition_ctg)), y = max(for_z_plot3$value), label = paste("Z'Factor:", round(plate_zprime, 4))), hjust = 1, vjust = 1) +
+      geom_quasirandom(aes(shape = control, color = drug_concentration_nm), alpha = .5, size = 4) +
       scale_color_viridis_c(end = .8) +
       ggtitle(paste0(nice_var, " by Condition")) +
-      labs(color = "Concentration", shape = "Control", subtitle = paste("Treatment Duration:", i, "Days")) +
+      labs(color = "Concentration (nM)", shape = "Control", subtitle = paste("Treatment Duration:", i, "Days")) +
       xlab("Condition") +
       ylab(nice_var) + 
       theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
+    
+    #if it's nn data, facet wrap by nn
+    if (grepl("nn", j)) {
+      zp_plot <- zp_plot +
+        facet_wrap(~sheet_name_ctg + nn)
+    } else {
+      #otherwise don't
+      zp_plot <- zp_plot +
+        facet_wrap(~sheet_name_ctg)
+    }
     zplots_byvar[[j]] <- zp_plot
   }
   #if we have both ctg and nn results for this variable (day 5), we want to print both of those plots...
   if (length(unique(for_z_plot2$variable)) == 2) {
       zplots[[i]] <- zplots_byvar[["signal_ctg"]] + zplots_byvar[["total_live_area_nn"]]
-      cat("\n")
-      cat("#### Signal")
-      cat("\n")
-      print(zplots_byvar[["signal_ctg"]])
-      cat("\n")
-      cat("\n")
-      cat("#### Total Live Area")
-      cat("\n")
-      cat("\n")
-      print(zplots_byvar[["total_live_area_nn"]])
-      cat("\n")
+  #     cat("\n")
+  #     cat("#### signal_ctg")
+  #     cat("\n")
+  #     print(zplots_byvar[["signal_ctg"]])
+  #     cat("\n")
+  #     cat("\n")
+  #     cat("#### Total Live Area")
+  #     cat("\n")
+  #     cat("\n")
+  #     print(zplots_byvar[["total_live_area_nn"]])
+  #     cat("\n")
   } else {
-    #... otherwise we just want the nn results (days 0 and 2)
+  #   #... otherwise we just want the nn results (days 0 and 2)
     zplots[[i]] <- zplots_byvar[["total_live_area_nn"]]
-    print(zplots_byvar[["total_live_area_nn"]])
-    cat("\n")
+  #   print(zplots_byvar[["total_live_area_nn"]])
+  #   cat("\n")
   }
 }
-#zplots
+zplots$`0` + zplots$`2`
+cat("\\n")
+zplots$`5`
 ```
-
-  * what concentration units are in the data you sent me?
-  * What's up with the variation in the DMSO Total Live Area from the drug experiment? 
-    - This might cause some issues when we try to look at the dose response curves for those drugs 
-    - It was fine in the plain DMSO plate?
 
 \newpage
 
 ## to do: What do the raw NN output values look like in the two plates?
 
 ```{r see_dmso_doses, include = FALSE}
-kable(unique(df[df$condition_ctg == "DMSO", c("condition_ctg", "drug_concentration_ctg")]) %>% arrange(drug_concentration_ctg))
+kable(unique(df[df$condition_ctg == "DMSO", c("condition_ctg", "drug_concentration_nm")]) %>% arrange(drug_concentration_nm))
 #I used this output to ask Des why there were so many concentrations for DMSO
 #I did not know that she was doing a dose response curve of DMSO in one of the plates
 ```
 
 ```{r stats, results = "asis"}
-stats1 <- df %>%
-  ungroup() %>%
-  dplyr::select(sheet_name_ctg, treatment_duration, seeding_date_nn, cell_line_ctg, plate_zprime_ctg, plate_percent_cv_ctg, plate_zprime_nn_tla, plate_percent_cv_nn_tla) %>%
-  distinct() %>%
-  arrange(seeding_date_nn, sheet_name_ctg, treatment_duration)
-names(stats1) <- c("ID", "Treatment\nDuration\n(Days)", "Seeding Date", "Cell Line", "Z'Factor\nCTG", "Plate\n%CV\nCTG", "Z'Factor\nNN", "Plate\n%CV\nNN")
+#loop through all cell lines that aren't NA
+for (i in unique(df[!is.na(df$cell_line_ctg),]$cell_line_ctg)) {
+  cat("\n")
+  cat(paste("### Plate Statistics", i))
+  cat("\n")
   
-pandoc.table(stats1, digits = 2, missing = "", keep.line.breaks = TRUE, emphasize.strong.cells = which(stats1[1:nrow(stats1), ] < 0, arr.ind = TRUE))
+  stats1 <- df %>%
+    filter(cell_line_ctg == i) %>%
+    dplyr::select(sheet_name_ctg, treatment_duration, nn, seeding_date_nn, plate_zprime_ctg, plate_percent_cv_ctg, plate_zprime_nn_tla, plate_percent_cv_nn_tla) %>%
+    distinct() %>%
+    arrange(seeding_date_nn, sheet_name_ctg, treatment_duration, nn)
+names(stats1) <- c("ID", "Treatment\nDuration\n(Days)", "Neural\nNetwork", "Seeding\nDate", "Z'Factor\nCTG", "Plate\n%CV\nCTG", "Z'Factor\nNN", "Plate\n%CV\nNN")
+
+  pandoc.table(stats1, digits = 2, missing = "", keep.line.breaks = TRUE, emphasize.strong.cells = which(stats1[1:nrow(stats1), ] < 0, arr.ind = TRUE))
+}
+
 ```
 
 \n
@@ -175,28 +199,75 @@ pandoc.table(stats1, digits = 2, missing = "", keep.line.breaks = TRUE, emphasiz
 
 # Dose Response Curves 
 
-```{r drcs, fig.height = 4, fig.width = 5, out.width = "75%", results = "asis", message = FALSE}
+```{r drcs_make-ctg-plots, message = FALSE}
+#get plots with ctg
 sample_only <- df %>%
-  filter(control == "sample")
-
+  #filter out controls
+  filter(control == "sample") %>%
+  #this filter gets rid of the rows that just have nn data (day 0 and day 2)
+  filter(!is.na(sheet_name_ctg))
+#col_list is a list of colors to use in the plots
+  #basically there's one color for each experiment, across all drugs
+#might have to rework this when we have more experiments
 col_list <- viridis(length(unique(sample_only$sheet_name_ctg)), end = .8)
 names(col_list) <- sort(unique(sample_only$sheet_name_ctg))
-
+#this is the dataframe we'll use for input into the function that makes the plots
 plots_df <- sample_only %>%
   group_by(condition_ctg) %>%
   nest()
+#make the plots and put them in this list!
+ctg_plots <- map2(plots_df$condition_ctg, plots_df$data, plot_drcs, colname = "percent_control_ctg", col_list = col_list)
+```
 
-plots_output <- map2(plots_df$condition_ctg, plots_df$data, plot_drcs, colname = "percent_control_ctg", col_list = col_list)
+```{r drcs_make-new-nn-plots}
+#get plots with new nn
+sample_only <- df %>%
+  filter(control == "sample") %>%
+  #filter out days 2 and 0
+  filter(treatment_duration == max(treatment_duration)) %>%
+  filter(nn == "NewNN")
+#we can use the col_list we made up in the ctg chunk
+plots_df <- sample_only %>%
+  group_by(condition_ctg) %>%
+  nest()
+#make the plots and put them in this list!
+newnn_plots <- map2(plots_df$condition_ctg, plots_df$data, plot_drcs, colname = "percent_control_nn_tla", col_list = col_list)
+```
 
+```{r drcs_make-old-nn-plots}
+#get plots with new nn
+sample_only <- df %>%
+  filter(control == "sample") %>%
+  #filter out days 2 and 0
+  filter(treatment_duration == max(treatment_duration)) %>%
+  filter(nn == "OldNN")
+#we can use the col_list we made up in the ctg chunk
+plots_df <- sample_only %>%
+  group_by(condition_ctg) %>%
+  nest()
+#make the plots and put them in this list!
+oldnn_plots <- map2(plots_df$condition_ctg, plots_df$data, plot_drcs, colname = "percent_control_nn_tla", col_list = col_list)
+```
+
+```{r drcs_print-plots, fig.height = 6, fig.width = 7, out.width = "40%", results = "asis"}
 #print plots_output
-for (i in plots_output) {
+for (i in 1:length(ctg_plots)) {
   cat("\n")
-  cat(paste("##", i$condition))
+  cat(paste("##", ctg_plots[[i]]$condition))
   cat("\n")
-  print(i$plot)  
+  #add nn labels
+  oldnn_plot <- oldnn_plots[[i]]$plot + ggtitle("Old Neural Network")
+  newnn_plot <- newnn_plots[[i]]$plot + ggtitle("New Neural Network")
+  patch_plot <- (plot_spacer() + ctg_plots[[i]]$plot) / (oldnn_plot | newnn_plot) +
+    plot_layout(widths = c(1, 1, 1))
+  print(patch_plot)  
   cat("\n")
-  pandoc.table(i$table)
   cat("\n")
+  cat("### The stats from this table were calculated with the CTG data.")
+  cat("\n")
+  pandoc.table(ctg_plots[[i]]$table, split.table = Inf)
+  cat("\n")
+  cat("\newpage")
 }
 ```
 
@@ -204,56 +275,83 @@ for (i in plots_output) {
 
 # Growth Rate Dose Response
 
-```{r gr, fig.height = 5, fig.width = 7, out.width = "65%"}
-for_plot <- df %>%
+![GR metrics](http://www.grcalculator.org/grtutorial/) are based on inhibition of the growth rate over the course of the assay and are independent of the division rate of the assayed cell lines
+
+I think about it like signal normalized to controls *and* signal at day 0.
+
+
+```{r gr, fig.height = 5, fig.width = 7, out.width = "50%", results = "asis"}
+df1 <- df %>%
   filter(treatment_duration > 0) %>%
   mutate(nice_trt_dur = paste("Treatment Duration:", treatment_duration, "Days"))
 
-gr_plot <- ggplot(data = for_plot, aes(x = drug_concentration_ctg, y = gr_nn_tla, color = condition_ctg)) +
-  # geom_boxplot() +
-  geom_point(alpha = .5, size = 3) +
-  scale_color_viridis_d(end = .8) +
-  geom_smooth(se = FALSE) +
-  theme_bw() +
-  scale_y_continuous(labels = scales::scientific) +
-  facet_wrap(~nice_trt_dur + sheet_name_ctg) +
-  ylim(c(-1.5, 1.5)) +
-  scale_x_log10() +
-  ylab("GR") +
-  xlab("Concentration") +
-  ggtitle("Growth Rate") +
-  labs(color = "Condition")
+for (i in unique(df1$nn)) {
+  for_plot <- df1 %>%
+    filter(nn == i)
+  
+  cat("\n")
+  cat(paste("###", i))
+  cat("\n")
+  
+  gr_plot <- ggplot(data = for_plot, aes(x = drug_concentration_nm, y = gr_nn_tla, color = condition_ctg)) +
+    geom_point(alpha = .5, size = 3) +
+    scale_color_viridis_d(end = .8) +
+    geom_smooth(se = FALSE) +
+    theme_bw() +
+    scale_y_continuous(labels = scales::scientific) +
+    facet_wrap(~nice_trt_dur + sheet_name_ctg) +
+    ylim(c(-1.5, 1.5)) +
+    scale_x_log10() +
+    ylab("GR") +
+    xlab("Concentration") +
+    ggtitle(paste(i, "Growth Rate")) +
+    labs(color = "Condition")
 
-gr_plot
+  print(gr_plot)
+  
+  cat("\n")
+}
+
 ```
 
 ## See Outlier GRs on a Log Scale
 
-```{r gr2, fig.height = 6, fig.width = 8, out.width = "65%", fig.align = "center"}
-gr_plot <- ggplot(data = for_plot, aes(x = drug_concentration_ctg, y = gr_nn_tla, color = condition_ctg)) +
-  geom_point(alpha = .5, size = 3) +
-  scale_color_viridis_d(end = .8) +
-  geom_smooth(se = FALSE) +
-  theme_bw() +
-  scale_y_continuous(labels = scales::scientific, transform = "log2") +
-  facet_wrap(~nice_trt_dur + sheet_name_ctg) +
-  scale_x_log10() +
-  ylab("GR") +
-  xlab("Concentration") +
-  ggtitle("Growth Rate-- Log Scale") +
-  labs(color = "Condition")
+```{r gr2, fig.height = 5, fig.width = 7, out.width = "50%", results = "asis"}
 
-gr_plot
+for (i in unique(df1$nn)) {
+  for_plot <- df1 %>%
+    filter(nn == i)
+  
+  cat("\n")
+  cat(paste("###", i))
+  cat("\n")
+  
+  gr_plot2 <- ggplot(data = for_plot, aes(x = drug_concentration_nm, y = gr_nn_tla, color = condition_ctg)) +
+    geom_point(alpha = .5, size = 3) +
+    scale_color_viridis_d(end = .8) +
+    geom_smooth(se = FALSE) +
+    theme_bw() +
+    scale_y_continuous(labels = scales::scientific, transform = "log2") +
+    facet_wrap(~nice_trt_dur + sheet_name_ctg) +
+    scale_x_log10() +
+    ylab("GR") +
+    xlab("Concentration (nM)") +
+    ggtitle(paste(i, "Growth Rate-- Log Scale")) +
+    labs(color = "Condition")
+  
+  gr_plot2
+  cat("\n")
+}
 ```
 
 ```{r outlier_grs, results = "asis"}
-# outliers <- for_plot %>%
-#   filter(gr_nn_tla > quantile(for_plot$gr_nn_tla)[[4]] + 1.5*(quantile(for_plot$gr_nn_tla)[[4]] - quantile(for_plot$gr_nn_tla)[[2]]))
-gr_stats <- for_plot %>%
-  group_by(treatment_duration, sheet_name_ctg) %>%
+gr_stats <- df1 %>%
+  group_by(treatment_duration, sheet_name_ctg, nn) %>%
   summarise(min = min(gr_nn_tla, na.rm = TRUE),
-            max = max(gr_nn_tla, na.rm = TRUE))
-names(gr_stats) <- c("Treatment\nDuration", "ID", "Minimum\nGR", "Maximum\nGR")
+            max = max(gr_nn_tla, na.rm = TRUE)) %>%
+  mutate(max = case_when(max > 1000 ~ as.character(formatC(max, format = "e", digits = 2)),
+                         TRUE ~ as.character(round(max, 4))))
+names(gr_stats) <- c("Treatment\nDuration", "ID", "Neural\nNetwork", "Minimum\nGR", "Maximum\nGR")
 pandoc.table(gr_stats, keep.line.breaks = TRUE)
 ```
 
