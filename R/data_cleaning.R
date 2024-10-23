@@ -10,6 +10,8 @@ source(here("R", "functions.R"))
 # download DRC data from dropbox
 ############################
 db_dest <- here("data", "dropbox")
+#this link goes to the BCa-MPS folder in DB
+#ask for access here: https://www.dropbox.com/scl/fo/gzbozdxcdv3fa3qhqfuhj/ANdrpAkIVuudjK9UrcPKbps?rlkey=gyrjlpr5sksaan6h5a1kfts3a&dl=0
 dropbox_downloader("https://www.dropbox.com/scl/fo/5euixwis9o4bz95r0grd6/AP989kq5uM_tntZDXOCBdf4?rlkey=ibgdxnxql0onmovsh4fq9wpkj&dl=1", db_dest)
 
 ############################
