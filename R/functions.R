@@ -100,7 +100,9 @@ ctg2plater <- function(xls_path, collect_metadata = TRUE, range = "A1:M50", data
     plate_df[[i]]$sheet_name <- plate_names[[i]]
   }
   #bind plates into one dataframe
-  bound_data <- bind_rows(plate_df)
+  bound_data <- bind_rows(plate_df) %>%
+    mutate(filepath = xls_path,
+           filename = basename(xls_path))
   #merge plate data with metadata
   experiment_df <- full_join(bound_data, meta_df)
   experiment_df <- experiment_df %>% janitor::clean_names()
@@ -129,9 +131,11 @@ microsNNreader <- function(xls_path, write_meta = TRUE) {
   filename <- basename(xls_path)
   #get seeding date from filename
   s_date <- stringr::str_extract(filename, "[[:digit:]]{8}")
-  trt_dur <- stringr::str_extract(filename, "Image(\\d)")
+  trt_dur <- stringr::str_extract(tolower(filename), "image(\\d)")
   ctg_merge <- stringr::str_extract(filename, "_(\\d{6})-")
-  
+  if(is.na(ctg_merge)) {
+    ctg_merge <- stringr::str_extract(filename, "-(\\d{6})-")
+  }
   #clean large df. extract well, treatment treatment_duration, and experiment date info from the document name
   experiment_data <- bound_data %>%
     janitor::clean_names() %>%
@@ -143,11 +147,13 @@ microsNNreader <- function(xls_path, write_meta = TRUE) {
     #extract well number from the "document" column
     extract(col = document, into = "well", regex = "([A-H]\\d{2})", remove = FALSE) %>%
     #clean up extracted columns
-    mutate(treatment_duration = str_remove_all(treatment_duration, "Image"),
+    mutate(treatment_duration = str_remove_all(treatment_duration, "image"),
            ctg_merge_id = str_remove_all(ctg_merge_id, "_|-"),
            seeding_date = as.Date(seeding_date, format = "%Y%m%d"),
            nn = case_when(grepl("NewNN", xls_path) ~ "NewNN",
-                          TRUE ~ "OldNN")) 
+                          TRUE ~ "OldNN"),
+           filepath = xls_path,
+           filename = filename) 
 
   
   #unmelt live/dead
@@ -363,7 +369,7 @@ make_ctg_v_nn_plot <- function(df, x_var_nice = NA, y_var_nice = NA) {
     geom_smooth(data = df, aes(x = xvar, y = yvar), color = "black", method = "lm") +
     geom_point(data = df, aes(x = xvar, y = yvar, color = sheet_name_ctg), size = 3, alpha = .5) +
     theme_bw() +
-    scale_color_viridis_d(end = .8) +
+    scale_color_viridis_d(end = .8, guide = NULL) +
     ggtitle("Neural Network vs CTG") +
     labs(subtitle = paste("Treatment Duration =", trt_dur, "Days"),
          color = "Plate ID") +
@@ -374,7 +380,7 @@ make_ctg_v_nn_plot <- function(df, x_var_nice = NA, y_var_nice = NA) {
     geom_label(data = lm_df, aes(x = max(df$xvar, na.rm = TRUE), y = min(df$yvar, na.rm = TRUE), label = paste("Coef:", coef)), hjust = 1, vjust = -2.3) +
     xlim(c(min(df$xvar, na.rm = TRUE), max(df$xvar, na.rm = TRUE))) +
     ylim(c(min(df$yvar, na.rm = TRUE), max(df$yvar, na.rm = TRUE))) +
-    facet_wrap(~nn)
+    facet_grid(cols = vars(nn), rows = vars(sheet_name_ctg))
   
   return(ctgvnn_plot)
 }

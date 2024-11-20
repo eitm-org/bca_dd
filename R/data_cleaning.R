@@ -19,6 +19,7 @@ dropbox_downloader("https://www.dropbox.com/scl/fo/5euixwis9o4bz95r0grd6/AP989kq
 ############################
 #list all files you copied over from dropbox
 all_paths <- list.files(db_dest, recursive = TRUE, full.names = TRUE)
+all_paths <- all_paths[!grepl("~", all_paths)]
 #get the paths to excel files of ctg data
 ctg_paths <- all_paths[grepl("ctg", all_paths)]
 #get the paths to excel files of nn (neural network) data, 
