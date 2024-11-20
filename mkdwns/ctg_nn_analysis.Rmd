@@ -50,21 +50,16 @@ ctgvnn_raw <- df %>%
 ctg_nn_raw <- make_ctg_v_nn_plot(ctgvnn_raw, x_var_nice = "Raw RLU (CTG)", y_var_nice = "Total Live Area Raw (NN)")
 ```
 
-```{r include = FALSE}
-ctgplot0 <- ggplot(data = df[df$treatment_duration == 5,], aes(x = percent_control_ctg, y = percent_control_nn_tla)) +
-  facet_wrap(~nn) +
-  geom_point(alpha = .5) +
-  geom_smooth(method = "lm")
-ctgplot0
+```{r ctg_v_nn_print, fig.height = 45, fig.width = 10, out.height = "70%"}
+ctgvnn_plot
 ```
 
-```{r ctg_v_nn_print, fig.height = 4, fig.width = 6, out.width = "40%"}
-ctgvnn_plot
+```{r tme, fig.height = 8, fig.width = 8, out.width = "40%"}
 knitr::include_graphics("/Users/acoleman/Documents/GitHub/bca_dd/images/tme_nn_results.png")
 ```
 \n
 
-```{r ctgvnn_raw, fig.height = 4, out.width = "40%"}
+```{r ctgvnn_raw, fig.height = 50, fig.width = 12, , out.height = "70%"}
 ctg_nn_raw
 ```
 
@@ -77,7 +72,7 @@ ctg_nn_raw
 
 The following plots show raw value by condition for each plate and treatment duration. They are included for quality control purposes.
 
-```{r zprime_plot, fig.height = 7, fig.width =15, results = "asis"}
+```{r zprime_plot, fig.height = 25, fig.width = 40, out.height = "80%", results = "asis"}
 for_z_plot <- df %>%
   dplyr::select(c(sheet_name_ctg, signal_ctg, total_live_area_nn, sheet_name_ctg, condition_ctg, drug_concentration_nm, treatment_duration, control, plate_zprime_ctg, plate_zprime_nn_tla, nn)) %>%
   melt(id = c("sheet_name_ctg", "condition_ctg", "drug_concentration_nm", "treatment_duration", "control", "plate_zprime_ctg", "plate_zprime_nn_tla", "nn"))
@@ -176,6 +171,8 @@ kable(unique(df[df$condition_ctg == "DMSO", c("condition_ctg", "drug_concentrati
 #loop through all cell lines that aren't NA
 for (i in unique(df[!is.na(df$cell_line_ctg),]$cell_line_ctg)) {
   cat("\n")
+  cat("\n")
+  cat("\n")
   cat(paste("### Plate Statistics", i))
   cat("\n")
   
@@ -205,7 +202,7 @@ sample_only <- df %>%
   #filter out controls
   filter(control == "sample") %>%
   #this filter gets rid of the rows that just have nn data (day 0 and day 2)
-  filter(!is.na(sheet_name_ctg))
+  filter(!is.na(sheet_name_ctg) & !is.na(treatment_duration))
 #col_list is a list of colors to use in the plots
   #basically there's one color for each experiment, across all drugs
 #might have to rework this when we have more experiments
@@ -224,7 +221,7 @@ ctg_plots <- map2(plots_df$condition_ctg, plots_df$data, plot_drcs, colname = "p
 sample_only <- df %>%
   filter(control == "sample") %>%
   #filter out days 2 and 0
-  filter(treatment_duration == max(treatment_duration)) %>%
+  filter(treatment_duration == max(treatment_duration, na.rm = TRUE)) %>%
   filter(nn == "NewNN")
 #we can use the col_list we made up in the ctg chunk
 plots_df <- sample_only %>%
@@ -239,7 +236,7 @@ newnn_plots <- map2(plots_df$condition_ctg, plots_df$data, plot_drcs, colname = 
 sample_only <- df %>%
   filter(control == "sample") %>%
   #filter out days 2 and 0
-  filter(treatment_duration == max(treatment_duration)) %>%
+  filter(treatment_duration == max(treatment_duration, na.rm = TRUE)) %>%
   filter(nn == "OldNN")
 #we can use the col_list we made up in the ctg chunk
 plots_df <- sample_only %>%
@@ -249,7 +246,7 @@ plots_df <- sample_only %>%
 oldnn_plots <- map2(plots_df$condition_ctg, plots_df$data, plot_drcs, colname = "percent_control_nn_tla", col_list = col_list)
 ```
 
-```{r drcs_print-plots, fig.height = 6, fig.width = 7, out.width = "40%", results = "asis"}
+```{r drcs_print-plots, fig.height = 6, fig.width = 7, out.width = "100%", results = "asis"}
 #print plots_output
 for (i in 1:length(ctg_plots)) {
   cat("\n")
@@ -267,7 +264,8 @@ for (i in 1:length(ctg_plots)) {
   cat("\n")
   pandoc.table(ctg_plots[[i]]$table, split.table = Inf)
   cat("\n")
-  cat("\newpage")
+  cat("\n")
+  cat("\n")
 }
 ```
 
@@ -280,7 +278,7 @@ for (i in 1:length(ctg_plots)) {
 I think about it like signal normalized to controls *and* signal at day 0.
 
 
-```{r gr, fig.height = 5, fig.width = 7, out.width = "50%", results = "asis"}
+```{r gr, fig.height = 15, fig.width = 15, out.width = "80%", results = "asis", warning = FALSE, message = FALSE}
 df1 <- df %>%
   filter(treatment_duration > 0) %>%
   mutate(nice_trt_dur = paste("Treatment Duration:", treatment_duration, "Days"))
@@ -316,12 +314,13 @@ for (i in unique(df1$nn)) {
 
 ## See Outlier GRs on a Log Scale
 
-```{r gr2, fig.height = 5, fig.width = 7, out.width = "50%", results = "asis"}
+```{r gr2, fig.height = 10, fig.width = 14, out.width = "80%", results = "asis"}
 
 for (i in unique(df1$nn)) {
   for_plot <- df1 %>%
     filter(nn == i)
-  
+  cat("\n")
+  cat("\n")
   cat("\n")
   cat(paste("###", i))
   cat("\n")
@@ -339,7 +338,7 @@ for (i in unique(df1$nn)) {
     ggtitle(paste(i, "Growth Rate-- Log Scale")) +
     labs(color = "Condition")
   
-  gr_plot2
+  print(gr_plot2)
   cat("\n")
 }
 ```
